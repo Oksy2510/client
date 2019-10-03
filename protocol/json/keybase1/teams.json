@@ -3189,6 +3189,10 @@
         {
           "name": "inviteID",
           "type": "TeamInviteID"
+        },
+        {
+          "name": "allowInaction",
+          "type": "boolean"
         }
       ],
       "response": null
