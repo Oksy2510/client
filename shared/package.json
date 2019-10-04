@@ -6,7 +6,6 @@
     "_helper": "yarn run _node desktop/yarn-helper",
     "_node": "cross-env-shell BABEL_ENV=yarn babel-node --extensions='.tsx' --extensions='.js' ",
     "help": "yarn run _helper help",
-    "create-release": "yarn run _helper create-release",
     "lint": "yarn run lint-specific .",
     "lint-specific": "eslint --cache --quiet --ext js,ts,tsx,d.ts,mobile.tsx,desktop.tsx",
     "postinstall": "yarn run _helper postinstall",
@@ -55,7 +54,8 @@
     "tsc-slow": "node --max-old-space-size=4096 ./node_modules/.bin/tsc --project ./tsconfig.slow.json ",
     "build-storybook": "build-storybook",
     "modules": "yarn install --pure-lockfile --ignore-optional",
-    "log-to-trace": "yarn _node desktop/yarn-helper/log-to-trace"
+    "log-to-trace": "yarn _node desktop/yarn-helper/log-to-trace",
+    "whats-new": "yarn run _helper whats-new"
   },
   "jest": {
     "coverageDirectory": "./coverage",
