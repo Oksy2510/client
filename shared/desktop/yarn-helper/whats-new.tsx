@@ -2,12 +2,8 @@
 import fs from 'fs'
 import path from 'path'
 import readline from 'readline'
-import releasesJSON from '../../whats-new/releases-gen'
-
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-})
+// import releasesJSON from '../../whats-new/releases-gen.ts'
+const releasesJSON = {}
 
 const commands = {
   'create-release': {
@@ -15,13 +11,6 @@ const commands = {
     help: 'Update release information for "What\'s New" notifier',
   },
 }
-
-/*
- * TODO Developer Notes
- *
- * - Need to represent the series of questions as a static variable to be iterated on
- */
-
 /*
  * Questions
  *
@@ -59,17 +48,35 @@ type Question = {
   required: boolean
   text: string
   validator: validatorFn
-  success: successWithAccumulatorFn
+  update: updateWithAccumulatorFn
 }
-type validatorFn = (answer: string) => {success: boolean; message: string}
-type successWithAccumulatorFn = (acc: object, answer: string) => void
-type nextFn = (acc: object) => string | null
+type validatorFn = (answer: string) => {valid: boolean; message: string}
+type updateWithAccumulatorFn = (acc: object, answer: string) => object
+type nextFn = (answer?: string) => string | null
+
+type Feature = {
+  text: string
+  image?: string
+  primaryButton: {
+    text: string
+    path: string
+    external: boolean
+  } | null
+  secondaryButton: {
+    text: string
+    path: string
+    external: boolean
+  } | null
+}
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+})
 
 // Source: https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
 const semverRegex = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
-const formatQuestion = (question: string) => `${question}:\n`
-
-let numFeatures = 1
+const formatQuestion = (question: string) => `❓${question}:\n`
 
 const questions: Questions = {
   version: {
@@ -78,13 +85,16 @@ const questions: Questions = {
       text: '(Required) What is version of this release? (MAJOR.MINOR.PATCH)',
       validator: answer => {
         const match = answer.match(semverRegex)
-        const success = match ? !!match.length : false
-        return success
-          ? {success, message: ''}
-          : {success, message: 'Version must match semantic vesioning (MAJOR.MINOR.PATCH)'}
+        const valid = match ? !!match.length : false
+        return valid
+          ? {valid, message: ''}
+          : {valid, message: 'Version must match semantic vesioning (MAJOR.MINOR.PATCH)'}
       },
-      success: (newVersion, answer) => {
-        newVersion['version'] = answer
+      update: (current, answer) => {
+        return {
+          ...current,
+          version: answer,
+        }
       },
     },
     next: () => 'numberOfFeatures',
@@ -94,12 +104,21 @@ const questions: Questions = {
       required: true,
       text: 'How many features to add to "What\'s New" in this release?',
       validator: answer => {
-        return !isNaN(Number(answer))
-          ? {success: true, message: ''}
-          : {success: false, message: 'Must be a number'}
+        const num = Number(answer)
+        const isNumber = !isNaN(num)
+        return isNumber
+          ? num > 0
+            ? {valid: true, message: ''}
+            : {valid: false, message: 'Need at least one feature to highlight this release'}
+          : {valid: false, message: 'Must be a number'}
       },
-      success: (_, answer) => {
-        numFeatures = Number(answer)
+      update: (current, answer) => {
+        const numFeatures = Number(answer)
+        const featuresArray = Array(numFeatures).fill({})
+        return {
+          ...current,
+          features: featuresArray,
+        }
       },
     },
     next: () => null,
@@ -110,10 +129,13 @@ const questions: Questions = {
       required: true,
       text: 'Enter a description of this feature',
       validator: answer => {
-        return answer ? {success: true, message: ''} : {success: false, message: 'Enter a description'}
+        return answer ? {valid: true, message: ''} : {valid: false, message: 'Enter a description'}
       },
-      success: (newVersion, answer) => {
-        newVersion['text'] = answer
+      update: (currentVersion, answer) => {
+        return {
+          ...currentVersion,
+          text: answer,
+        }
       },
     },
     next: () => 'featureImage',
@@ -121,15 +143,19 @@ const questions: Questions = {
   featureImage: {
     question: {
       required: false,
-      text: '(Optional) Enter a path to an image asset.\nE.g. "./images/releases/{version}/image-name.png"',
+      text:
+        '(Optional) Enter a path to an image asset.\nE.g. ./images/releases/{MAJOR.MINOR.PATCH}/image-name.png',
       validator: answer => {
         const exists = fs.existsSync(answer)
         return exists
-          ? {success: true, message: ''}
-          : {success: false, message: `Image file at path ${path.resolve(answer)} does not exist.`}
+          ? {valid: true, message: ''}
+          : {valid: false, message: `Image file at path ${path.resolve(answer)} does not exist.`}
       },
-      success: (newVersion, answer) => {
-        newVersion['image'] = answer
+      update: (currentFeature, answer) => {
+        return {
+          ...currentFeature,
+          image: answer || null,
+        }
       },
     },
     next: () => 'featurePrimaryButton',
@@ -137,70 +163,97 @@ const questions: Questions = {
   featurePrimaryButton: {
     question: {
       required: false,
-      text: '(Optional) Does this feature have a primary button?',
+      text: '(Optional) Does this feature have a primary button? (y/n)',
       validator: answer => {
         // At this point we have an answer than is not an empty string, so it must be either 'y' or 'n'
         return answer === 'y'
-          ? {success: true, message: ''}
+          ? {valid: true, message: ''}
           : answer === 'n'
-          ? {success: true, message: ''}
-          : {success: false, message: 'Enter either (y/n)'}
+          ? {valid: true, message: ''}
+          : {valid: false, message: 'Enter either (y/n)'}
       },
-      success: (newFeature, answer) => {
+      update: (currentFeature, answer) => {
+        // Initialize the primaryButton object
         if (answer === 'y') {
-          // Initialize the primaryButton object
-          newFeature['primaryButton'] = {}
+          return {
+            ...currentFeature,
+            primaryButton: {},
+          }
         } else {
-          newFeature['primaryButton'] = null
+          return {
+            ...currentFeature,
+            primaryButton: null,
+            secondaryButton: null,
+          }
         }
       },
     },
-    next: newFeature => (newFeature['primaryButton'] !== null ? 'featurePrimayButtonText' : null),
+    next: answer => (answer && answer == 'y' ? 'featurePrimayButtonText' : null),
   },
   featurePrimayButtonText: {
     question: {
       required: true,
       text: '(Required) Enter text for the primary button',
       validator: answer => {
-        return answer ? {success: true, message: ''} : {success: false, message: ''}
+        return answer ? {valid: true, message: ''} : {valid: false, message: ''}
       },
-      success: (newFeature, answer) => {
-        newFeature['primaryButton']['text'] = answer
-      },
-    },
-    next: () => 'featurePrimaryButtonPath',
-  },
-  featurePrimaryButtonExternal: {
-    question: {
-      required: true,
-      text: '(Required) Will this button navigate to an web URL?',
-      validator: answer => {
-        // At this point we have an answer than is not an empty string, so it must be either 'y' or 'n'
-        return answer === 'y'
-          ? {success: true, message: ''}
-          : answer === 'n'
-          ? {success: true, message: ''}
-          : {success: false, message: 'Enter either (y/n)'}
-      },
-      success: (newFeature, answer) => {
-        if (answer === 'y') {
-          newFeature['primaryButton']['external'] = true
-        } else {
-          newFeature['primaryButton']['external'] = false
+      update: (currentFeature, answer) => {
+        return {
+          ...currentFeature,
+          primaryButton: {
+            // Dynamically building the object, primaryButton does exist
+            // @ts-ignore
+            ...currentFeature.primaryButton,
+            text: answer,
+          },
         }
       },
     },
     next: () => 'featurePrimaryButtonExternal',
+  },
+  featurePrimaryButtonExternal: {
+    question: {
+      required: true,
+      text: '(Required) Will this button navigate to an web URL? (y/n)',
+      validator: answer => {
+        // At this point we have an answer than is not an empty string, so it must be either 'y' or 'n'
+        return answer === 'y'
+          ? {valid: true, message: ''}
+          : answer === 'n'
+          ? {valid: true, message: ''}
+          : {valid: false, message: 'Enter either (y/n)'}
+      },
+      update: (currentFeature, answer) => {
+        return {
+          ...currentFeature,
+          primaryButton: {
+            // Dynamically building the object, primaryButton does exist
+            // @ts-ignore
+            ...currentFeature.primaryButton,
+            external: answer === 'y',
+          },
+        }
+      },
+    },
+    next: () => 'featurePrimaryButtonPath',
   },
   featurePrimaryButtonPath: {
     question: {
       required: true,
       text: '(Required) Enter the path the button will navigate to',
       validator: answer => {
-        return answer ? {success: true, message: ''} : {success: false, message: ''}
+        return answer ? {valid: true, message: ''} : {valid: false, message: ''}
       },
-      success: (newFeature, answer) => {
-        newFeature['primaryButton']['path'] = answer
+      update: (currentFeature, answer) => {
+        return {
+          ...currentFeature,
+          primaryButton: {
+            // Dynamically building the object, primaryButton does exist
+            // @ts-ignore
+            ...currentFeature.primaryButton,
+            path: answer,
+          },
+        }
       },
     },
     next: () => 'featureSecondaryButton',
@@ -208,56 +261,67 @@ const questions: Questions = {
   featureSecondaryButton: {
     question: {
       required: false,
-      text: '(Optional) Does this feature have a secondary button?',
+      text: '(Optional) Does this feature have a secondary button? (y/n)',
       validator: answer => {
         // At this point we have an answer than is not an empty string, so it must be either 'y' or 'n'
         return answer === 'y'
-          ? {success: true, message: ''}
+          ? {valid: true, message: ''}
           : answer === 'n'
-          ? {success: true, message: ''}
-          : {success: false, message: 'Enter either (y/n)'}
+          ? {valid: true, message: ''}
+          : {valid: false, message: 'Enter either (y/n)'}
       },
-      success: (newFeature, answer) => {
-        if (answer === 'y') {
-          // Initialize the secondaryButton object
-          newFeature['secondaryButton'] = {}
-        } else {
-          newFeature['secondaryButton'] = null
+      update: (currentFeature, answer) => {
+        // Initialize the secondaryButton object
+        return {
+          ...currentFeature,
+          secondaryButton: answer == 'y' ? {} : null,
         }
       },
     },
-    next: newFeature => (newFeature['secondaryButton'] !== null ? 'featureSecondaryButtonText' : null),
+    next: answer => (answer && answer === 'y' ? 'featureSecondaryButtonText' : null),
   },
   featureSecondaryButtonText: {
     question: {
       required: true,
       text: '(Required) Enter text for the secondary button',
       validator: answer => {
-        return answer ? {success: true, message: ''} : {success: false, message: ''}
+        return answer ? {valid: true, message: ''} : {valid: false, message: ''}
       },
-      success: (newFeature, answer) => {
-        newFeature['secondaryButton']['text'] = answer
+      update: (currentFeature, answer) => {
+        return {
+          ...currentFeature,
+          secondaryButton: {
+            // Dynamically building the object, secondaryButton does exist
+            // @ts-ignore
+            ...currentFeature.secondaryButton,
+            text: answer,
+          },
+        }
       },
     },
-    next: () => 'featureSecondaryButtonPath',
+    next: () => 'featureSecondaryButtonExternal',
   },
   featureSecondaryButtonExternal: {
     question: {
       required: true,
-      text: '(Required) Will this button navigate to an web URL?',
+      text: '(Required) Will this button navigate to an web URL? (y/n)',
       validator: answer => {
         // At this point we have an answer than is not an empty string, so it must be either 'y' or 'n'
         return answer === 'y'
-          ? {success: true, message: ''}
+          ? {valid: true, message: ''}
           : answer === 'n'
-          ? {success: true, message: ''}
-          : {success: false, message: 'Enter either (y/n)'}
+          ? {valid: true, message: ''}
+          : {valid: false, message: 'Enter either (y/n)'}
       },
-      success: (newFeature, answer) => {
-        if (answer === 'y') {
-          newFeature['secondaryButton']['external'] = true
-        } else {
-          newFeature['secondaryButton']['external'] = false
+      update: (currentFeature, answer) => {
+        return {
+          ...currentFeature,
+          secondaryButton: {
+            // Dynamically building the object, secondaryButton does exist
+            // @ts-ignore
+            ...currentFeature.secondaryButton,
+            external: answer === 'y',
+          },
         }
       },
     },
@@ -268,10 +332,18 @@ const questions: Questions = {
       required: true,
       text: '(Required) Enter the path the button will navigate to',
       validator: answer => {
-        return answer ? {success: true, message: ''} : {success: false, message: ''}
+        return answer ? {valid: true, message: ''} : {valid: false, message: ''}
       },
-      success: (newFeature, answer) => {
-        newFeature['secondaryButton']['path'] = answer
+      update: (currentFeature, answer) => {
+        return {
+          ...currentFeature,
+          secondaryButton: {
+            // Dynamically building the object, secondaryButton does exist
+            // @ts-ignore
+            ...currentFeature.secondaryButton,
+            path: answer,
+          },
+        }
       },
     },
     next: () => null,
@@ -283,17 +355,16 @@ const requiredQuestion = (...args: [string, validatorFn]): Promise<string> => {
   const formattedQuestion = formatQuestion(question)
   return new Promise(resolve => {
     rl.question(formattedQuestion, answer => {
-      console.log('DEBUG: rl.question answered', {question, answer})
       if (!answer) {
         console.log('Required: Please enter a value')
-        resolve(requiredQuestion(...args))
+        return resolve(requiredQuestion(...args))
       }
-      const {success, message} = validator(answer)
-      if (!success) {
+      const {valid, message} = validator(answer)
+      if (!valid) {
         console.log(`${message}\n`)
-        requiredQuestion(...args)
+        return resolve(requiredQuestion(...args))
       }
-      resolve(answer)
+      return resolve(answer)
     })
   })
 }
@@ -302,55 +373,64 @@ const optionalQuestion = (...args: [string, validatorFn]): Promise<string | null
   const [question, validator] = args
   const formattedQuestion = formatQuestion(question)
   return new Promise(resolve => {
-    rl.question(formattedQuestion, (answer: string) => {
+    rl.question(`${formattedQuestion}\n<Return> to skip`, (answer: string) => {
       if (!answer) {
-        resolve(null)
+        return resolve(null)
       }
-      const {success, message} = validator(answer)
-      if (!success) {
+      const {valid, message} = validator(answer)
+      if (!valid) {
         console.log(`${message}\n`)
         resolve(optionalQuestion(...args))
+        return
       }
       resolve(answer)
+      return
     })
   })
 }
-const makeChainQuestions = (newObj: object) => {
-  const chainQuestions = async (question: Question, next: nextFn) => {
-    if (question.required) {
-      const answer = await requiredQuestion(question.text, question.validator)
-      console.log('DEBUG success', {newObj, answer})
-      question.success(newObj, answer)
+const chainQuestions = async (question: Question, next: nextFn, currentObj: {}) => {
+  if (question.required) {
+    const answer = await requiredQuestion(question.text, question.validator)
+    const newObj = question.update(currentObj, answer)
 
-      const nextName = next(newObj)
-      console.log('DEBUG: next question', {nextName})
-      // End of feature questions
+    const nextName = next(answer)
+    // Base case, last question, and populated object
+    if (!nextName) {
+      return newObj
+    }
+    // Continue to next question
+    const {question: nextQuestion, next: nextNext} = questions[nextName]
+    console.log('\n')
+    return await chainQuestions(nextQuestion, nextNext, newObj)
+  } else {
+    const answer = await optionalQuestion(question.text, question.validator)
+    const newObj = question.update(currentObj, answer || '')
+
+    // User skipped optional questions, go to the next question
+    if (!answer) {
+      const nextName = next()
+      // Base case, last question, and populated object
       if (!nextName) {
-        console.log('DEBUG: next question returning')
-        return
+        return newObj
       }
-      const {question: nextQuestion, next: nextNext} = questions[nextName]
       // Continue to next question
-      await chainQuestions(nextQuestion, nextNext)
-    } else {
-      const answer = await optionalQuestion(question.text, question.validator)
-      // User skipped optional questions
-      if (!answer) {
-        const nextName = next(newObj)
-        // End of feature questions
-        if (!nextName) {
-          return
-        }
-        const {question: nextQuestion, next: nextNext} = questions[nextName]
-        // Continue to next question
-        await chainQuestions(nextQuestion, nextNext)
-      } else {
-        question.success(newObj, answer)
+      const {question: nextQuestion, next: nextNext} = questions[nextName]
+      console.log('\n')
+      return await chainQuestions(nextQuestion, nextNext, newObj)
+    }
+    // Answer provided, update the feature, go to the next question
+    else {
+      const nextName = next(answer)
+      // Base case, last question, and populated object
+      if (!nextName) {
+        return newObj
       }
+      // Continue to next question
+      const {question: nextQuestion, next: nextNext} = questions[nextName]
+      console.log('\n')
+      return await chainQuestions(nextQuestion, nextNext, newObj)
     }
   }
-
-  return chainQuestions
 }
 
 /*
@@ -363,29 +443,75 @@ const makeChainQuestions = (newObj: object) => {
  * longer included in 'What's New'
  */
 async function createRelease() {
-  const newVersion = {}
-
-  // Kick off the release questions by starting with version and number of feature questions
+  // Kick off the release questions by starting with 'version' then 'number of features' questions
+  const emptyVersion = {}
   const {question: versionQuestion, next: versionNext} = questions.version
-  const premlimChain = makeChainQuestions(newVersion)
-  await premlimChain(versionQuestion, versionNext)
+  const updatedVersion = await chainQuestions(versionQuestion, versionNext, emptyVersion)
 
-  console.log('DEBUG: finished prelim questions', {newVersion, numFeatures})
+  // -- At this point we have an object that looks like:
+  // {
+  //    version: 'X.X.X',
+  //    features: [ {}, ... ], // with {numFeatures} of empty objects
+  // }
 
-  // Create an array that has {numFeatures} objects populated by calling chainQuestions
-
-  const newFeatures = Promise.all(
-    Array(numFeatures)
-      .fill(null)
-      .map(async () => {
-        const newFeature = {}
-        const {question: featureTextQuestion, next: featureTextNext} = questions.featureText
-        const featureChain = makeChainQuestions(newFeature)
-        await featureChain(featureTextQuestion, featureTextNext)
-        console.log('DEBUG: Done with one iteration of features', {newFeatures})
-        return await newFeature
+  const featuresPromiseChain = updatedVersion.features
+    .map((emptyFeature: {}) => {
+      const {question: featureTextQuestion, next: featureTextNext} = questions.featureText
+      const args = [featureTextQuestion, featureTextNext, emptyFeature]
+      return args
+    })
+    // Sequentially execute {numFeatures} chains of feature questions
+    // Then merge each Feature object into an array features = [ Feature1, Feature2, ... ]
+    .reduce((prevChain: Promise<Array<Feature>>, args: [Question, nextFn, {}], index: number) => {
+      return prevChain.then(features => {
+        console.log('\n')
+        console.log(`Feature ${index + 1}`)
+        console.log('--------------------')
+        return chainQuestions(...args).then((newFeature: Feature) => {
+          return [...features, newFeature]
+        })
       })
-  )
+    }, Promise.resolve([]))
+  const updatedFeatures = await featuresPromiseChain
+  // -- At this pont we have an object that looks like:
+  // {
+  //    version: 'X.X.X',
+  //    features: [
+  //      {
+  //        text: '...',
+  //        image: '...' | null,
+  //        primaryButton: {
+  //          text: '...',
+  //          path: '...',
+  //          external: true | false
+  //        } | null,
+  //        secondaryButton: {
+  //          text: '...',
+  //          path: '...',
+  //          external: true | false
+  //        } | null
+  //      },
+  //
+  //      ...
+  //    ]
+  // }
+
+  const newVersion = {
+    ...updatedVersion,
+    features: updatedFeatures,
+  }
+
+  const newReleaseGen = {
+    current: newVersion,
+    last: releasesJSON.current,
+    lastLast: releasesJSON.last,
+  }
+
+  // Remove images from images directory when releasesJSON.lastLast is no longer used
+
+  console.log('DEBUG: FINALLY DONE', JSON.stringify(newVersion, null, 4))
+
+  process.exit(0)
 }
 
 export default commands
