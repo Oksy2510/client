@@ -1573,6 +1573,11 @@ func removeInviteID(ctx context.Context, team *Team, invID keybase1.TeamInviteID
 			team.MetaContext(ctx).Debug("remoteInviteID suppressing error due to allowInaction: %v", err)
 			return nil
 		}
+		// xxx todo test double-removing a ph
+		if libkb.IsAppStatusCode(err, keybase1.StatusCode_SCTeamInviteBadCancel) {
+			team.MetaContext(ctx).Debug("remoteInviteID suppressing error due to allowInaction: %v", err)
+			return nil
+		}
 	}
 	return err
 }
