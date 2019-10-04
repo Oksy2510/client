@@ -2,8 +2,7 @@
 import fs from 'fs'
 import path from 'path'
 import readline from 'readline'
-// import releasesJSON from '../../whats-new/releases-gen.ts'
-const releasesJSON = {}
+import releasesJSON from '../../whats-new/releases-gen.json'
 
 const commands = {
   'create-release': {
@@ -69,20 +68,17 @@ type Feature = {
   } | null
 }
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-})
-
 // Source: https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
 const semverRegex = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
-const formatQuestion = (question: string) => `❓${question}:\n`
+const formatQuestion = (question: string) => `❓ ${question}:\n`
+const relativeWhatsNew = './whats-new/'
+const validPathRegex = new RegExp(`^\.\.\/images\/releases\/${semverRegex.source}/.*$`)
 
 const questions: Questions = {
   version: {
     question: {
       required: true,
-      text: '(Required) What is version of this release? (MAJOR.MINOR.PATCH)',
+      text: 'What is version of this release? (MAJOR.MINOR.PATCH)',
       validator: answer => {
         const match = answer.match(semverRegex)
         const valid = match ? !!match.length : false
@@ -143,11 +139,19 @@ const questions: Questions = {
   featureImage: {
     question: {
       required: false,
-      text:
-        '(Optional) Enter a path to an image asset.\nE.g. ./images/releases/{MAJOR.MINOR.PATCH}/image-name.png',
+      text: 'Enter a path to an image asset.\nE.g. ./images/releases/{MAJOR.MINOR.PATCH}/image-name.png',
       validator: answer => {
-        const exists = fs.existsSync(answer)
-        return exists
+        const pathRelativeToWhatsNew = path.relative(relativeWhatsNew, answer)
+        const exists = fs.existsSync(pathRelativeToWhatsNew)
+        const isValidPath = pathRelativeToWhatsNew.match(validPathRegex)
+        console.log('DEBUG: featureImage', {
+          answer,
+          pathRelativeToWhatsNew,
+          exists,
+          isValidPath,
+          validPathRegex: validPathRegex.source,
+        })
+        return isValidPath && exists
           ? {valid: true, message: ''}
           : {valid: false, message: `Image file at path ${path.resolve(answer)} does not exist.`}
       },
@@ -162,8 +166,8 @@ const questions: Questions = {
   },
   featurePrimaryButton: {
     question: {
-      required: false,
-      text: '(Optional) Does this feature have a primary button? (y/n)',
+      required: true,
+      text: 'Does this feature have a primary button? (y/n)',
       validator: answer => {
         // At this point we have an answer than is not an empty string, so it must be either 'y' or 'n'
         return answer === 'y'
@@ -193,7 +197,7 @@ const questions: Questions = {
   featurePrimayButtonText: {
     question: {
       required: true,
-      text: '(Required) Enter text for the primary button',
+      text: 'Enter text for the primary button',
       validator: answer => {
         return answer ? {valid: true, message: ''} : {valid: false, message: ''}
       },
@@ -214,7 +218,7 @@ const questions: Questions = {
   featurePrimaryButtonExternal: {
     question: {
       required: true,
-      text: '(Required) Will this button navigate to an web URL? (y/n)',
+      text: 'Will this button navigate to an web URL? (y/n)',
       validator: answer => {
         // At this point we have an answer than is not an empty string, so it must be either 'y' or 'n'
         return answer === 'y'
@@ -240,7 +244,7 @@ const questions: Questions = {
   featurePrimaryButtonPath: {
     question: {
       required: true,
-      text: '(Required) Enter the path the button will navigate to',
+      text: 'Enter the path the button will navigate to',
       validator: answer => {
         return answer ? {valid: true, message: ''} : {valid: false, message: ''}
       },
@@ -260,8 +264,8 @@ const questions: Questions = {
   },
   featureSecondaryButton: {
     question: {
-      required: false,
-      text: '(Optional) Does this feature have a secondary button? (y/n)',
+      required: true,
+      text: 'Does this feature have a secondary button? (y/n)',
       validator: answer => {
         // At this point we have an answer than is not an empty string, so it must be either 'y' or 'n'
         return answer === 'y'
@@ -283,7 +287,7 @@ const questions: Questions = {
   featureSecondaryButtonText: {
     question: {
       required: true,
-      text: '(Required) Enter text for the secondary button',
+      text: 'Enter text for the secondary button',
       validator: answer => {
         return answer ? {valid: true, message: ''} : {valid: false, message: ''}
       },
@@ -304,7 +308,7 @@ const questions: Questions = {
   featureSecondaryButtonExternal: {
     question: {
       required: true,
-      text: '(Required) Will this button navigate to an web URL? (y/n)',
+      text: 'Will this button navigate to an web URL? (y/n)',
       validator: answer => {
         // At this point we have an answer than is not an empty string, so it must be either 'y' or 'n'
         return answer === 'y'
@@ -330,7 +334,7 @@ const questions: Questions = {
   featureSecondaryButtonPath: {
     question: {
       required: true,
-      text: '(Required) Enter the path the button will navigate to',
+      text: 'Enter the path the button will navigate to',
       validator: answer => {
         return answer ? {valid: true, message: ''} : {valid: false, message: ''}
       },
@@ -350,8 +354,8 @@ const questions: Questions = {
   },
 }
 
-const requiredQuestion = (...args: [string, validatorFn]): Promise<string> => {
-  const [question, validator] = args
+const requiredQuestion = (...args: [readline.Interface, string, validatorFn]): Promise<string> => {
+  const [rl, question, validator] = args
   const formattedQuestion = formatQuestion(question)
   return new Promise(resolve => {
     rl.question(formattedQuestion, answer => {
@@ -361,7 +365,7 @@ const requiredQuestion = (...args: [string, validatorFn]): Promise<string> => {
       }
       const {valid, message} = validator(answer)
       if (!valid) {
-        console.log(`${message}\n`)
+        console.log(`⚠️ ${message}\n`)
         return resolve(requiredQuestion(...args))
       }
       return resolve(answer)
@@ -369,17 +373,17 @@ const requiredQuestion = (...args: [string, validatorFn]): Promise<string> => {
   })
 }
 
-const optionalQuestion = (...args: [string, validatorFn]): Promise<string | null> => {
-  const [question, validator] = args
+const optionalQuestion = (...args: [readline.Interface, string, validatorFn]): Promise<string | null> => {
+  const [rl, question, validator] = args
   const formattedQuestion = formatQuestion(question)
   return new Promise(resolve => {
-    rl.question(`${formattedQuestion}\n<Return> to skip`, (answer: string) => {
+    rl.question(`(Optional) ${formattedQuestion}\n<Return> to skip\n`, (answer: string) => {
       if (!answer) {
         return resolve(null)
       }
       const {valid, message} = validator(answer)
       if (!valid) {
-        console.log(`${message}\n`)
+        console.log(`⚠️ Invalid: ${message}\n`)
         resolve(optionalQuestion(...args))
         return
       }
@@ -388,9 +392,9 @@ const optionalQuestion = (...args: [string, validatorFn]): Promise<string | null
     })
   })
 }
-const chainQuestions = async (question: Question, next: nextFn, currentObj: {}) => {
+const chainQuestions = async (rl: readline.Interface, question: Question, next: nextFn, currentObj: {}) => {
   if (question.required) {
-    const answer = await requiredQuestion(question.text, question.validator)
+    const answer = await requiredQuestion(rl, question.text, question.validator)
     const newObj = question.update(currentObj, answer)
 
     const nextName = next(answer)
@@ -401,9 +405,9 @@ const chainQuestions = async (question: Question, next: nextFn, currentObj: {}) 
     // Continue to next question
     const {question: nextQuestion, next: nextNext} = questions[nextName]
     console.log('\n')
-    return await chainQuestions(nextQuestion, nextNext, newObj)
+    return await chainQuestions(rl, nextQuestion, nextNext, newObj)
   } else {
-    const answer = await optionalQuestion(question.text, question.validator)
+    const answer = await optionalQuestion(rl, question.text, question.validator)
     const newObj = question.update(currentObj, answer || '')
 
     // User skipped optional questions, go to the next question
@@ -416,7 +420,7 @@ const chainQuestions = async (question: Question, next: nextFn, currentObj: {}) 
       // Continue to next question
       const {question: nextQuestion, next: nextNext} = questions[nextName]
       console.log('\n')
-      return await chainQuestions(nextQuestion, nextNext, newObj)
+      return await chainQuestions(rl, nextQuestion, nextNext, newObj)
     }
     // Answer provided, update the feature, go to the next question
     else {
@@ -428,7 +432,7 @@ const chainQuestions = async (question: Question, next: nextFn, currentObj: {}) 
       // Continue to next question
       const {question: nextQuestion, next: nextNext} = questions[nextName]
       console.log('\n')
-      return await chainQuestions(nextQuestion, nextNext, newObj)
+      return await chainQuestions(rl, nextQuestion, nextNext, newObj)
     }
   }
 }
@@ -443,10 +447,15 @@ const chainQuestions = async (question: Question, next: nextFn, currentObj: {}) 
  * longer included in 'What's New'
  */
 async function createRelease() {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  })
+
   // Kick off the release questions by starting with 'version' then 'number of features' questions
   const emptyVersion = {}
   const {question: versionQuestion, next: versionNext} = questions.version
-  const updatedVersion = await chainQuestions(versionQuestion, versionNext, emptyVersion)
+  const updatedVersion = await chainQuestions(rl, versionQuestion, versionNext, emptyVersion)
 
   // -- At this point we have an object that looks like:
   // {
@@ -457,21 +466,28 @@ async function createRelease() {
   const featuresPromiseChain = updatedVersion.features
     .map((emptyFeature: {}) => {
       const {question: featureTextQuestion, next: featureTextNext} = questions.featureText
-      const args = [featureTextQuestion, featureTextNext, emptyFeature]
+      const args = [rl, featureTextQuestion, featureTextNext, emptyFeature]
       return args
     })
     // Sequentially execute {numFeatures} chains of feature questions
     // Then merge each Feature object into an array features = [ Feature1, Feature2, ... ]
-    .reduce((prevChain: Promise<Array<Feature>>, args: [Question, nextFn, {}], index: number) => {
-      return prevChain.then(features => {
-        console.log('\n')
-        console.log(`Feature ${index + 1}`)
-        console.log('--------------------')
-        return chainQuestions(...args).then((newFeature: Feature) => {
-          return [...features, newFeature]
+    .reduce(
+      (
+        prevChain: Promise<Array<Feature>>,
+        args: [readline.Interface, Question, nextFn, {}],
+        index: number
+      ) => {
+        return prevChain.then(features => {
+          console.log('\n')
+          console.log(`Feature ${index + 1}`)
+          console.log('--------------------')
+          return chainQuestions(...args).then((newFeature: Feature) => {
+            return [...features, newFeature]
+          })
         })
-      })
-    }, Promise.resolve([]))
+      },
+      Promise.resolve([])
+    )
   const updatedFeatures = await featuresPromiseChain
   // -- At this pont we have an object that looks like:
   // {
@@ -508,10 +524,25 @@ async function createRelease() {
   }
 
   // Remove images from images directory when releasesJSON.lastLast is no longer used
+  cleanUpRemovedVersion(releasesJSON.lastLast)
 
   console.log('DEBUG: FINALLY DONE', JSON.stringify(newVersion, null, 4))
+  rl.close()
+}
 
-  process.exit(0)
+/*
+ * 1. Read through and check if there are images in any of the features
+ * 2. Collect the images and check which exist
+ * 3. Tell the user which images exist and ask for each one if they would like to remove them.
+ * 4. Delete each file
+ */
+function cleanUpRemovedVersion(release) {
+  if (release.features && release.features.length) {
+    const imagePaths = release.features
+      .map((feature: Feature) => (feature && feature.image ? feature.image : null))
+      .filter(Boolean)
+    console.log('DEBUG: cleanUpRemovedVersion', {imagePaths})
+  }
 }
 
 export default commands
