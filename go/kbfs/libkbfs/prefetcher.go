@@ -938,6 +938,7 @@ func (p *blockPrefetcher) stopIfNeeded(
 		p.log.CDebugf(ctx, "Error checking space: +%v", err)
 		return false, false
 	}
+	p.log.CDebugf(ctx, "hasRoom=%t howMuchRoom=%d action=%s", hasRoom, howMuchRoom, req.action)
 	if hasRoom {
 		db := p.config.GetSettingsDB()
 		if db != nil {

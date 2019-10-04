@@ -61,7 +61,7 @@ func (md modeDefault) ThrottledPrefetchPeriod() time.Duration {
 }
 
 func (md modeDefault) DefaultBlockRequestAction() BlockRequestAction {
-	return BlockRequestWithPrefetch
+	return BlockRequestPrefetchUntilFull
 }
 
 func (md modeDefault) RekeyWorkers() int {
