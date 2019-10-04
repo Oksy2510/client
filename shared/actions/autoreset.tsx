@@ -52,7 +52,12 @@ function promptReset(
         RecoverPasswordGen.submitResetPrompt
       )
       response.result(action.payload.action)
-      yield Saga.put(RouteTreeGen.createNavigateAppend({path: ['login'], replace: true}))
+      yield Saga.put(
+        RouteTreeGen.createNavigateAppend({
+          path: [{selected: 'login', props: {resetSuccess: true}}],
+          replace: true,
+        })
+      )
     } else {
       logger.info('Starting account reset process')
       yield Saga.put(AutoresetGen.createStartAccountReset({skipPassword: true}))

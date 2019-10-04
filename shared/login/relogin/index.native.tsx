@@ -57,6 +57,16 @@ class LoginRender extends React.Component<Props> {
               </Kb.Text>
             </Kb.Box>
           )}
+          {this.props.resetBannerUser && (
+            <Kb.Banner color="green">
+              <Kb.BannerParagraph
+                bannerColor="green"
+                content={`You have successfully reset your account, ${
+                  this.props.resetBannerUser
+                }. You can now log in as usual.`}
+              />
+            </Kb.Banner>
+          )}
           {!!this.props.error && <Kb.Banner color="red">{this.props.error}</Kb.Banner>}
           <Kb.UserCard username={this.props.selectedUser} outerStyle={styles.card}>
             <Dropdown

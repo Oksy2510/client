@@ -9,6 +9,7 @@ export type Props = {
   error: string
   password: string
   showTyping: boolean
+  resetBannerUser: string | null
   selectedUser: string
   selectedUserChange: (selectedUser: string) => void
   passwordChange: (password: string) => void

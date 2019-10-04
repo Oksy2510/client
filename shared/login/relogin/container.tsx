@@ -11,7 +11,7 @@ import * as Container from '../../util/container'
 import flags from '../../util/feature-flags'
 import * as ConfigTypes from '../../constants/types/config'
 
-type OwnProps = {}
+type OwnProps = {resetSuccess: boolean}
 
 type Props = {
   error: string
@@ -21,6 +21,7 @@ type Props = {
   onLogin: (user: string, password: string) => void
   onSignup: () => void
   onSomeoneElse: () => void
+  resetBannerUser: string | null
   selectedUser: string
   users: Array<ConfigTypes.ConfiguredAccount>
 }
@@ -79,6 +80,7 @@ const LoginWrapper = (props: Props) => {
       onSubmit={onSubmit}
       password={password}
       passwordChange={setPassword}
+      resetBannerUser={props.resetBannerUser}
       selectedUser={selectedUser}
       selectedUserChange={selectedUserChange}
       showTypingChange={setShowTyping}
@@ -89,8 +91,9 @@ const LoginWrapper = (props: Props) => {
 }
 
 export default Container.connect(
-  state => ({
+  (state: Container.TypedState) => ({
     _users: state.config.configuredAccounts,
+    _autoresetUser: state.autoreset.username,
     error: state.login.error,
     selectedUser: state.config.defaultUsername,
   }),
@@ -105,7 +108,7 @@ export default Container.connect(
     onSignup: () => dispatch(SignupGen.createRequestAutoInvite()),
     onSomeoneElse: () => dispatch(ProvisionGen.createStartProvision()),
   }),
-  (stateProps, dispatchProps, _: OwnProps) => ({
+  (stateProps, dispatchProps, ownProps: OwnProps) => ({
     error: (stateProps.error && stateProps.error.desc) || '',
     loggedInMap: new Map<string, boolean>(
       stateProps._users.map(account => [account.username, account.hasStoredSecret])
@@ -115,7 +118,8 @@ export default Container.connect(
     onLogin: dispatchProps.onLogin,
     onSignup: dispatchProps.onSignup,
     onSomeoneElse: dispatchProps.onSomeoneElse,
-    selectedUser: stateProps.selectedUser,
+    resetBannerUser: ownProps.resetSuccess ? stateProps._autoresetUser : null,
+    selectedUser: ownProps.resetSuccess ? stateProps._autoresetUser : stateProps.selectedUser,
     users: sortBy(stateProps._users, 'username'),
   })
 )(LoginWrapper)

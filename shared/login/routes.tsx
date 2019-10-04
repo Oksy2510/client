@@ -6,13 +6,14 @@ import {KnowPassword, EnterPassword} from './reset/password'
 import Waiting from './reset/waiting'
 import Confirm from './reset/confirm'
 
-type OwnProps = {}
+type OwnProps = Container.RouteProps<{resetSuccess: boolean}>
 type Props = {
+  resetSuccess: boolean
   showLoading: boolean
   showRelogin: boolean
 }
 
-const _RootLogin = ({showLoading, showRelogin}: Props) => {
+const _RootLogin = ({resetSuccess, showLoading, showRelogin}: Props) => {
   const JoinOrLogin = require('./join-or-login/container').default
   const Loading = require('./loading/container').default
   const Relogin = require('./relogin/container').default
@@ -20,7 +21,7 @@ const _RootLogin = ({showLoading, showRelogin}: Props) => {
     return <Loading />
   }
   if (showRelogin) {
-    return <Relogin />
+    return <Relogin resetSuccess={resetSuccess} />
   }
   return <JoinOrLogin />
 }
@@ -38,7 +39,7 @@ const RootLogin = Container.connect(
     return {showLoading, showRelogin}
   },
   () => ({}),
-  (s, d, _: OwnProps) => ({...s, ...d})
+  (s, d, o: OwnProps) => ({...s, ...d, resetSuccess: Container.getRouteProps(o, 'resetSuccess', false)})
 )(_RootLogin)
 
 export const newRoutes = {

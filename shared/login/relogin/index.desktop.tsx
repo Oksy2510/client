@@ -52,7 +52,21 @@ class Login extends React.Component<Props, State> {
 
     return (
       <SignupScreen
-        banners={errorBanner(this.props.error)}
+        banners={[
+          ...(this.props.resetBannerUser
+            ? [
+                <Kb.Banner color="green">
+                  <Kb.BannerParagraph
+                    bannerColor="green"
+                    content={`You have successfully reset your account, ${
+                      this.props.resetBannerUser
+                    }. You can now log in as usual.`}
+                  />
+                </Kb.Banner>,
+              ]
+            : []),
+          errorBanner(this.props.error),
+        ]}
         headerStyle={styles.header}
         rightActionComponent={
           <Kb.Button

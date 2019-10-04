@@ -17,6 +17,7 @@ const commonProps: Props = {
   onSubmit: Sb.action('onSubmit'),
   password: '',
   passwordChange: Sb.action('passwordChange'),
+  resetBannerUser: null,
   selectedUser: 'awendland',
   selectedUserChange: Sb.action('selectedUserChange'),
   showTyping: false,
